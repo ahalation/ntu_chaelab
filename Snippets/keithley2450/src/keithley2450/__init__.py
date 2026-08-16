@@ -1,2 +1,1 @@
-def main() -> None:
-    print("Hello from keithley2450!")
+from .keithley2450tsp import Keithley2450TSP
