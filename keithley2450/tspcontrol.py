@@ -8,122 +8,144 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import tkinter as tk
 from tkinter import ttk, messagebox
+from ttkwidgets.frames import Tooltip
 from src.keithley2450 import Keithley2450TSP
 
 plt.switch_backend("TkAgg")
 
-class Keithley2450IVLoop(tk.Tk):
+class Keithley2450MSC(tk.Tk):
     """
-    #TODO - replace placeholder description
-    IV Loop Control Application using custom pymeasure Instrument library rewritten to use TSP instead of SCIP
+    Measurement Source Control (MSC) Application for the Keithley 2450 using customised pymeasure Instrument class rewritten to use TSP instead of SCIP.
+    Includes context manager to initiate mode switch to TSP and back after completion of measurement.
+    Currently supported:
+    Linear I-V Sweep
+    Planned:
+    PUND Sequence - purely experimental - minimum pulse and measure times estimated at approx ~0.2ms which may be too large for most micro+nano ferroelectrics
+    Possible but not currently planned:
+    Logarithmic Sweep
+    List (Custom Level) Sweep
     """
 
     def __init__(self, screenName = None, baseName = None, className = "Tk", useTk = True, sync = False, use = None) -> None:
         super().__init__(screenName, baseName, className, useTk, sync, use)
-        self.title("Keithley 2450 IV Loop TSP Script")
+        self.title("Keithley 2450 TSP Control")
         self.gpibLabel = tk.Label(self, text="GPIB Address:")
-        self.gpibLabel.grid(row=1, column=0, padx=10, pady=5)
+        self.gpibLabel.grid(row=0, column=0, padx=10, pady=5)
         self.gpibEntry = tk.Entry(self)
-        self.gpibEntry.grid(row=1, column=1, padx=10, pady=5)
-        self.gpibEntry.insert(0, "GPIB::18")
+        self.gpibEntry.grid(row=0, column=1, padx=10, pady=5)
+        self.gpibEntry.insert(0, "GPIB::19")
         self.initButton = tk.Button(self, text="Initialize", command=self.initialise)
-        self.initButton.grid(row=0, column=0, columnspan=2, padx=10, pady=10)
+        self.initButton.grid(row=1, column=0, columnspan=2, padx=10, pady=10)
         self.portLabel = tk.Label(self, text="Select Port:")
-        self.portLabel.grid(row=9, column=0, padx=10, pady=5)
+        self.portLabel.grid(row=2, column=0, padx=10, pady=5)
         self.portVar = tk.StringVar(self)
         self.portMenu = ttk.Combobox(self, textvariable=self.portVar)
         self.portMenu["values"] = ("Front", "Rear")
-        self.portMenu.current(0)
-        self.portMenu.grid(row=9, column=1, padx=10, pady=5)
+        self.portMenu.grid(row=2, column=1, padx=10, pady=5)
+        self.portMenu.current(1)
         self.startVoltLabel = tk.Label(self, text="Start/Stop Voltage (V):")
-        self.startVoltLabel.grid(row=2, column=0, padx=10, pady=5)
+        self.startVoltLabel.grid(row=3, column=0, padx=10, pady=5)
         self.startVoltEntry = tk.Entry(self)
-        self.startVoltEntry.grid(row=2, column=1, padx=10, pady=5)
+        self.startVoltEntry.grid(row=3, column=1, padx=10, pady=5)
         self.startVoltEntry.insert(0, "0")
         self.maxVoltLabel = tk.Label(self, text="Max Voltage (V):")
-        self.maxVoltLabel.grid(row=3, column=0, padx=10, pady=5)
+        self.maxVoltLabel.grid(row=4, column=0, padx=10, pady=5)
         self.maxVoltEntry = tk.Entry(self)
-        self.maxVoltEntry.grid(row=3, column=1, padx=10, pady=5)
+        self.maxVoltEntry.grid(row=4, column=1, padx=10, pady=5)
         self.maxVoltEntry.insert(0, "5")
         self.minVoltLabel = tk.Label(self, text="Min Voltage (V):")
-        self.minVoltLabel.grid(row=4, column=0, padx=10, pady=5)
-        self.forwardOnlyLabel = tk.Label(self, text="Note: If set to Start/Stop Voltage, only forward loop will be executed")
-        self.forwardOnlyLabel.grid(row=10, column=10, padx=10, pady=5)
+        self.minVoltLabel.grid(row=5, column=0, padx=10, pady=5)
         self.minVoltEntry = tk.Entry(self)
-        self.minVoltEntry.grid(row=4, column=1, padx=10, pady=5)
+        self.minVoltEntry.grid(row=5, column=1, padx=10, pady=5)
         self.minVoltEntry.insert(0, "-5")
+        self.infoMinVoltLabel = tk.Label(self, text=" \u2753 ")
+        self.infoMinVoltLabel.grid(row=5, column=2, padx=2, pady=0)
+        self.infoMinVoltTooltip = Tooltip(self.infoMinVoltLabel, headertext=None, text="""If set to Start/Stop Voltage, only forward loop will be executed
+                                                                                          If Start/Stop, Max and Min Voltage are all equal, a static DC measurement will be taken instead""", timeout=0, showheader=0)
         self.stepLabel = tk.Label(self, text="Step Value (V):")
-        self.stepLabel.grid(row=6, column=0, padx=10, pady=5)
+        self.stepLabel.grid(row=7, column=0, padx=10, pady=5)
         self.stepEntry = tk.Entry(self)
-        self.stepEntry.grid(row=6, column=1, padx=10, pady=5)
+        self.stepEntry.grid(row=7, column=1, padx=10, pady=5)
         self.stepEntry.insert(0, "0.5")
         self.compCurrLabel = tk.Label(self, text="Compliance Current (mA):")
-        self.compCurrLabel.grid(row=6, column=0, padx=10, pady=5)
+        self.compCurrLabel.grid(row=8, column=0, padx=10, pady=5)
         self.compCurrEntry = tk.Entry(self)
-        self.compCurrEntry.grid(row=6, column=1, padx=10, pady=5)
+        self.compCurrEntry.grid(row=8, column=1, padx=10, pady=5)
         self.compCurrEntry.insert(0, "0.01")
         self.cyclesLabel = tk.Label(self, text="Number of Cycles:")
-        self.cyclesLabel.grid(row=7, column=0, padx=10, pady=5)
+        self.cyclesLabel.grid(row=9, column=0, padx=10, pady=5)
         self.cyclesEntry = tk.Entry(self)
-        self.cyclesEntry.grid(row=7, column=1, padx=10, pady=5)
+        self.cyclesEntry.grid(row=9, column=1, padx=10, pady=5)
         self.cyclesEntry.insert(0, "1")
-        self.filenameLabel = tk.Label(self, text="Output filename:")
-        self.filenameLabel.grid(row=7, column=0, padx=10, pady=5)
+        self.filenameLabel = tk.Label(self, text="Output filename (.csv):")
+        self.filenameLabel.grid(row=10, column=0, padx=10, pady=5)
         self.filenameEntry = tk.Entry(self)
-        self.filenameEntry.insert(0, "ivloop")
+        self.filenameEntry.grid(row=10, column=1, padx=10, pady=5)
+        self.filenameEntry.insert(0, "IV_measurement")
+        self.infoFilenameLabel = tk.Label(self, text=" \u2753 ")
+        self.infoFilenameLabel.grid(row=10, column=2, padx=2, pady=0)
+        self.infoFilenameTooltip = Tooltip(self.infoFilenameLabel, headertext=None, text="Output file will be generated at the same directory as this script, in .csv format", timeout=0, showheader=0)
         self.advancedLabel = tk.Label(self, text="--- Advanced Settings ---")
-        self.advancedLabel.grid(row=9, column=0, padx=10, pady=5)
-        # NOTE
-        # logarithmic and list sweeps are also available but will not be implemented yet
+        self.advancedLabel.grid(row=11, column=0, columnspan=2, padx=10, pady=5)
         self.sweepTypeLabel = tk.Label(self, text="Sweep Type")
-        self.sweepTypeLabel.grid(row=9, column=0, padx=10, pady=5)
+        self.sweepTypeLabel.grid(row=12, column=0, padx=10, pady=5)
         self.sweepTypeVar = tk.StringVar(self)
         self.sweepTypeMenu = ttk.Combobox(self, textvariable=self.sweepTypeVar)
         self.sweepTypeMenu["values"] = ("Linear")
+        self.sweepTypeMenu.grid(row=12, column=1, padx=10, pady=5)
         self.sweepTypeMenu.current(0)
-        self.sweepTypeMenu.grid(row=9, column=1, padx=10, pady=5)
-        # NOTE
-        # read times are obtained via number of power line cycles(NPLC)/power line frequency
-        # keithley 2450 nplc range: 0.01 to 10
-        # singapore power line frequency: 50Hz
-        # hence measure time per plc = 20ms
-        self.nplcLabel = tk.Label(self, text="Measurement Read Time @50Hz (ms):")
-        self.nplcLabel.grid(row=9, column=0, padx=10, pady=5)
+        self.infoSweepTypeLabel = tk.Label(self, text=" \u2753 ")
+        self.infoSweepTypeLabel.grid(row=12, column=2, padx=2, pady=0)
+        self.infoSweepTypeTooltip = Tooltip(self.infoSweepTypeLabel, headertext=None, text="Logarithmic and List sweeps are also available but will only be implemented upon request", timeout=0, showheader=0)
+        self.nplcLabel = tk.Label(self, text="Measurement Read Time (ms):")
+        self.nplcLabel.grid(row=13, column=0, padx=10, pady=5)
         self.nplcVar = tk.StringVar(self)
         self.nplcMenu = ttk.Combobox(self, textvariable=self.nplcVar)
-        # NOTE - 0.01 0.05 0.25 0.5 2.5 5 10
-        self.nplcMenu["values"] = ("2ms", "10ms", "50ms", "100ms", "500ms", "1s", "2s")
-        self.nplcMenu.current(3)
-        self.nplcMenu.grid(row=9, column=1, padx=10, pady=5)
+        # NOTE - Corresponding NPLC Values: 0.01, 0.05, 0.1, 0.5, 1, 5, 10
+        self.nplcMenu["values"] = ("0.2ms", "1ms", "2ms", "10ms", "20ms", "100ms", "200ms")
+        self.nplcMenu.grid(row=13, column=1, padx=10, pady=5)
+        self.nplcMenu.current(4)
+        self.infoNplcLabel = tk.Label(self, text=" \u2753 ")
+        self.infoNplcLabel.grid(row=13, column=2, padx=2, pady=0)
+        self.infoNplcTooltip = Tooltip(self.infoNplcLabel, headertext=None, text="""Read times are obtained via number of power line cycles(NPLC) divided by power line frequency
+                                                                                    Keithley 2450 NPLC range: 0.01 to 10 (Default 1)
+                                                                                    Singapore Mains Frequency: 50Hz""", timeout=0, showheader=0)
         self.delayLabel = tk.Label(self, text="Source Delay (ms):")
-        self.delayLabel.grid(row=7, column=0, padx=10, pady=5)
-        self.autoDelayLabel = tk.Label(self, text="Note: If set to a negative value, will use autodelay")
-        self.autoDelayLabel.grid(row=10, column=10, padx=10, pady=5)
+        self.delayLabel.grid(row=14, column=0, padx=10, pady=5)
         self.delayEntry = tk.Entry(self)
+        self.delayEntry.grid(row=14, column=1, padx=10, pady=5)
         self.delayEntry.insert(0, "-1")
+        self.infoDelayLabel = tk.Label(self, text=" \u2753 ")
+        self.infoDelayLabel.grid(row=14, column=2, padx=2, pady=0)
+        self.infoDelayTooltip = Tooltip(self.infoDelayLabel, headertext=None, text="If set to a negative value, will use autodelay", timeout=0, showheader=0)
         self.sourceRangeLabel = tk.Label(self, text="Source Signal Range:")
-        self.sourceRangeLabel.grid(row=9, column=0, padx=10, pady=5)
-        self.autoSourceRangeLabel = tk.Label(self, text="Note: If set to a negative value, will use autorange")
-        self.autoSourceRangeLabel.grid(row=10, column=10, padx=10, pady=5)
+        self.sourceRangeLabel.grid(row=16, column=0, padx=10, pady=5)
         self.sourceRangeVar = tk.StringVar(self)
         self.sourceRangeMenu = ttk.Combobox(self, textvariable=self.sourceRangeVar)
-        self.sourceRangeMenu["values"] = ("20mV", "200mV", "2V", "20V", "200V")
-        self.sourceRangeMenu.current(3)
-        self.sourceRangeMenu.grid(row=9, column=1, padx=10, pady=5)
-        self.measureRangeLabel = tk.Label(self, text="Measurement Signal Range (Approx. Output Value, mA):")
-        self.measureRangeLabel.grid(row=9, column=0, padx=10, pady=5)
-        self.autoMeasureRangeLabel = tk.Label(self, text="Note: If set to a negative value, will use autorange")
-        self.autoMeasureRangeLabel.grid(row=10, column=10, padx=10, pady=5)
+        self.sourceRangeMenu["values"] = ("Auto", "20mV", "200mV", "2V", "20V", "200V")
+        self.sourceRangeMenu.grid(row=16, column=1, padx=10, pady=5)
+        self.sourceRangeMenu.current(0)
+        self.measureRangeLabel = tk.Label(self, text="Measurement Signal Range (mA):")
+        self.measureRangeLabel.grid(row=17, column=0, padx=10, pady=5)
         self.measureRangeEntry = tk.Entry(self)
-        self.measureRangeEntry.grid(row=9, column=1, padx=10, pady=5)
-        self.measureRangeEntry.insert(0, "0.001")
+        self.measureRangeEntry.grid(row=17, column=1, padx=10, pady=5)
+        self.measureRangeEntry.insert(0, "-1")
+        self.infoMeasureRangeLabel = tk.Label(self, text=" \u2753 ")
+        self.infoMeasureRangeLabel.grid(row=17, column=2, padx=2, pady=0)
+        self.infoMeasureRangeTooltip = Tooltip(self.infoMeasureRangeLabel, headertext=None, text="""Set to a value approximately 125% of your estimated maximum output reading.
+                                                                                                    If set to a negative value, will use autorange""", timeout=0, showheader=0)
         self.button_start = tk.Button(self, text="Start Measurement", command=self.measure)
-        self.button_start.grid(row=10, column=0, columnspan=2, padx=10, pady=20)
+        self.button_start.grid(row=19, column=0, columnspan=2, padx=10, pady=20)
 
     def initialise(self) -> None:
         #TODO - test if reachable at supplied gpib address
         #TODO - test ctxmgr scpi-tsp switch
-        pass
+        try:
+            # self.smu = Keithley2450TSP(gpib_address)
+            messagebox.showinfo("Hi", "Test Message.")
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+        # pass
 
     def measure(self) -> None:
         #TODO - setup scpi-tsp context switch
@@ -135,15 +157,16 @@ class Keithley2450IVLoop(tk.Tk):
         #TODO - setup source (as input) and sweep (0) delays
         #TODO - setup sweep params
         #TODO - generate sweeps
+        #TODO - reset sources
         #TODO - read buffer
-        #TODO - clear buffer after read
+        #TODO - reset buffer
         #TODO - convert buffer into df
         #TODO - plot graph
-        #TODO - output to csv with given filename/default if not given
+        #TODO - output to csv with given filename
         pass
 
 if __name__ == "__main__":
-    app = Keithley2450IVLoop()
+    app = Keithley2450MSC()
     app.mainloop()
 
 #SECTION - Decompiled Lalit Script

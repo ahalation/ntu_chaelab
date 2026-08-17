@@ -71,8 +71,6 @@ class Keithley2450TSP(KeithleyBuffer, Instrument):
             **kwargs
         )
 
-#FIXME - set up temporary switch from scpi to tsp mode (MUST INCLUDE FAILURE REVERSION) - include as packaged method?
-
 #LINK - .venv\Lib\site-packages\pymeasure\instruments\instrument.py
 #TODO - default properties to define
 # complete
@@ -86,23 +84,23 @@ class Keithley2450TSP(KeithleyBuffer, Instrument):
 # checkerrors
 #LINK - .venv\Lib\site-packages\pymeasure\instruments\keithley\keithley2450.py
 
-#NOTE - progress marker (everything below this point is unconverted)
-
     source_mode = Instrument.control(
-        ":SOUR:FUNC?", ":SOUR:FUNC %s",
+        "print(smu.source.func)", "smu.source.func = %s",
         """ Control (string) the source mode, which can
-        take the values 'current' or 'voltage'. The convenience methods
-        :meth:`~.Keithley2450.apply_current` and :meth:`~.Keithley2450.apply_voltage`
-        can also be used. """,
+        take the values 'current' or 'voltage'.""",
         validator=strict_discrete_set,
-        values={'current': 'CURR', 'voltage': 'VOLT'},
+        values={"current": "smu.FUNC_DC_CURRENT", "voltage": "smu.FUNC_DC_VOLTAGE"},
         map_values=True
     )
 
-    source_enabled = Instrument.measurement(
-        "OUTPUT?",
-        """Get a boolean value that is True if the source is enabled. """,
-        cast=bool
+#NOTE - progress marker (everything below this point is unconverted)
+    source_enabled = Instrument.control(
+        "print(smu.source.output)", "smu.source.output = %s",
+        """ Control (string) the source mode, which can
+        take the values 'on' or 'off'.""",
+        validator=strict_discrete_set,
+        values={"on": "smu.ON", "off": "smu.OFF"},
+        map_values=True
     )
 
     ###############
@@ -110,22 +108,22 @@ class Keithley2450TSP(KeithleyBuffer, Instrument):
     ###############
 
     current = Instrument.measurement(
-        ":READ?",
+        "print(smu.measure.read())",
         """Get the current in Amps, if configured for this reading.
         """
     )
 
     current_range = Instrument.control(
-        ":SENS:CURR:RANG?", ":SENS:CURR:RANG:AUTO 0;:SENS:CURR:RANG %g",
+        "print(smu.source.getattribute(smu.FUNC_DC_CURRENT, smu.ATTR_SRC_RANGE))", "smu.source.setattribute(smu.FUNC_DC_CURRENT, smu.ATTR_SRC_RANGE, %g)",
         """ Control (floating) the measurement current
-        range in Amps, which can take values between -1.05 and +1.05 A.
+        range in Amps, which can take values between -1 and +1 A.
         Auto-range is disabled when this property is set. """,
         validator=truncated_range,
-        values=[-1.05, 1.05]
+        values=[-1, 1]
     )
 
     current_nplc = Instrument.control(
-        ":SENS:CURR:NPLC?", ":SENS:CURR:NPLC %g",
+        "print(smu.measure.getattribute(smu.FUNC_DC_CURRENT, smu.ATTR_MEAS_NPLC))", ":SENS:CURR:NPLC %g",
         """ Control (floating) the number of power line cycles
         (NPLC) for the DC current measurements, which sets the integration period
         and measurement speed. Takes values from 0.01 to 10, where 0.1, 1, and 10 are
@@ -179,7 +177,7 @@ class Keithley2450TSP(KeithleyBuffer, Instrument):
     ###############
 
     voltage = Instrument.measurement(
-        ":READ?",
+        "(smu.measure.read())",
         """Get the voltage in Volts, if configured for this reading.
         """
     )
